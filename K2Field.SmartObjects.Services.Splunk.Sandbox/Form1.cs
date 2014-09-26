@@ -31,7 +31,7 @@ namespace K2Field.SmartObjects.Services.Splunk.Sandbox
             };
         }
 
-        private async void btnPost_Click(object sender, EventArgs e)
+        private void btnPost_Click(object sender, EventArgs e)
         {
 
             using (var service = new Service(SdkHelper.Splunk.Scheme, SdkHelper.Splunk.Host, SdkHelper.Splunk.Port, new Namespace(user: "nobody", app: "search")))
@@ -39,12 +39,13 @@ namespace K2Field.SmartObjects.Services.Splunk.Sandbox
 
                 Console.WriteLine("Login as " + SdkHelper.Splunk.Username);
 
-                await service.LogOnAsync(SdkHelper.Splunk.Username, SdkHelper.Splunk.Password);
+                service.LogOnAsync(SdkHelper.Splunk.Username, SdkHelper.Splunk.Password).Wait();
 
                 Console.WriteLine("Create an index");
 
-                string indexName = "jk-index";
-                Index index = await service.Indexes.GetOrNullAsync(indexName);
+                string indexName = "k2";
+                Index index = Task.Run(() => service.Indexes.GetOrNullAsync(indexName).Result).Result;
+                //var result = Task.Run(() => SaveAssetDataAsDraft().Result).Result;
 
                 if (index != null)
                 {

@@ -75,101 +75,51 @@ namespace K2Field.SmartObjects.Services.SplunkService
             set { resultmessage = value; }
         }
 
-
-        [Attributes.Method("SubmitMessage", SourceCode.SmartObjects.Services.ServiceSDK.Types.MethodType.Execute, "SubmitMessage", "SubmitMessage",
-        new string[] { "Message", "Index", "Source", "SourceType" }, //required property array (no required properties for this sample)
-        new string[] { "Message", "Index", "Source", "SourceType" }, //input property array (no optional input properties for this sample)
-        new string[] { "Message", "Index", "Source", "SourceType", "ResultStatus", "ResultMessage" })] //return property array (2 properties for this example)
-        public SplunkMessage PostMessageToSplunk()
-        {
-            try
-            {
-                // Load connection info for Splunk server in .splunkrc file.
-                var cli = Command.Splunk("submit");
-                //cli.Parse(argv);
-
-                string[] cargs = { };
-                cli.Parse(cargs);
-
-
-                var service = Splunk.Service.Connect(cli.Opts);
-
-                var args = new ReceiverSubmitArgs
-                {
-                    Index = this.Index,
-                    Source = this.Source,
-                    SourceType = this.SourceType
-                };
-
-                var receiver = new Receiver(service);
-
-                receiver.Submit(args, message);
-
-                this.ResultStatus = "OK";
-            }
-            catch(Exception ex)
-            {
-                this.ResultStatus = "Error";
-                this.ResultMessage = ex.Message;
-            }
-
-
-//            # Splunk host (default: localhost)
-//host=localhost
-//# Splunk admin port (default: 8089)
-//port=8089
-//# Splunk username
-//username=admin
-//# Splunk password
-//password=K2pass!
-//# Access scheme (default: https)
-//scheme=https
-
-//.splunkrc
-
-            return this;
-        }
-
-        [Attributes.Method("SubmitMessage", SourceCode.SmartObjects.Services.ServiceSDK.Types.MethodType.Execute, "SubmitMessage", "SubmitMessage",
+        [Attributes.Method("PostMessage", SourceCode.SmartObjects.Services.ServiceSDK.Types.MethodType.Execute, "Post Message", "Post Message",
         new string[] { "Message", "Index", "CreateIndex", "Source", "SourceType" }, //required property array (no required properties for this sample)
         new string[] { "Message", "Index", "CreateIndex", "Source", "SourceType" }, //input property array (no optional input properties for this sample)
         new string[] { "Message", "Index", "CreateIndex", "Source", "SourceType", "ResultStatus", "ResultMessage" })] //return property array (2 properties for this example)
 
-        public async Task<SplunkMessage> PostMessage()
+        public SplunkMessage PostMessage()
         {
-
-            using (var service = new Splunk.Client.Service(SdkHelper.Splunk.Scheme, SdkHelper.Splunk.Host, SdkHelper.Splunk.Port, new Splunk.Client.Namespace(user: "nobody", app: "K2")))
+            try
             {
+                using (var service = new Splunk.Client.Service(SdkHelper.Splunk.Scheme, SdkHelper.Splunk.Host, SdkHelper.Splunk.Port, new Splunk.Client.Namespace(user: "nobody", app: "search")))
+                {
+                    string indexName = this.Index.ToLower();
+                    service.LogOnAsync(SdkHelper.Splunk.Username, SdkHelper.Splunk.Password).Wait();
+                    Splunk.Client.Index index = Task.Run(() => service.Indexes.GetOrNullAsync(indexName).Result).Result;
 
-                await service.LogOnAsync(SdkHelper.Splunk.Username, SdkHelper.Splunk.Password);
+                    if (index == null && !this.CreateIndex)
+                    {
+                        this.ResultStatus = "Error";
+                        this.ResultMessage = "Index does not exist";
+                        return this;
+                    }
+                    else if (index == null && this.CreateIndex)
+                    {
+                        index = Task.Run(() => service.Indexes.CreateAsync(indexName).Result).Result;
+                        index.EnableAsync().Wait();
 
-                string indexName = this.Index;
-                Splunk.Client.Index index = await service.Indexes.GetOrNullAsync(indexName);
-
-                if (index == null && !this.CreateIndex)
-                {
-                    this.ResultStatus = "Error";
-                    this.ResultMessage = "Index does not exist";
-                    return this;
-                } else if (index == null && this.CreateIndex)
-                {
-                    index = await service.Indexes.CreateAsync(indexName);
-                }
-                else if (index == null)
-                {
-                    this.ResultStatus = "Error";
-                    this.ResultMessage = "Index does not exist";
-                    return this;
-                }
-                
-                try
-                {
-                    await index.EnableAsync();
+                    }
+                    else if (index == null)
+                    {
+                        this.ResultStatus = "Error";
+                        this.ResultMessage = "Index does not exist";
+                        return this;
+                    }
 
                     Splunk.Client.Transmitter transmitter = service.Transmitter;
                     Splunk.Client.SearchResult result;
-                    
-                    result = await transmitter.SendAsync(this.Message, indexName);
+
+
+                    Splunk.Client.TransmitterArgs ta = new Splunk.Client.TransmitterArgs()
+                    {
+                        Source = this.Source,
+                        SourceType = this.SourceType,
+
+                    };
+                    result = Task.Run(() => transmitter.SendAsync(this.Message, indexName, ta).Result).Result;
 
                     //using (var results = await service.SearchOneShotAsync(string.Format("search index={0}", indexName)))
                     //{
@@ -178,16 +128,17 @@ namespace K2Field.SmartObjects.Services.SplunkService
                     //        Console.WriteLine(task);
                     //    }
                     //}
-                }
-                catch (Exception ex)
-                {
-                    this.ResultStatus = "Error";
-                    this.ResultMessage = ex.Message;
-                }
 
-                this.ResultStatus = "OK";
+
+
+                    this.ResultStatus = "OK";
+                }
             }
-
+            catch (Exception ex)
+            {
+                this.ResultStatus = "Error";
+                this.ResultMessage = ex.Message;
+            }
             return this;
         }
 
