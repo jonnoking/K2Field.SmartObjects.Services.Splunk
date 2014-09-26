@@ -10,6 +10,7 @@ using Attributes = SourceCode.SmartObjects.Services.ServiceSDK.Attributes;
 using SourceCode.SmartObjects.Services.ServiceSDK.Types;
 using Splunk;
 using SplunkSDKHelper;
+using Splunk.Client.Helpers;
 
 
 namespace K2Field.SmartObjects.Services.SplunkService
@@ -24,6 +25,15 @@ namespace K2Field.SmartObjects.Services.SplunkService
             get { return index; }
             set { index = value; }
         }
+
+        private bool createindex = false;
+        [Attributes.Property("CreateIndex", SoType.YesNo, "Create Index", "Create Index")]
+        public bool CreateIndex
+        {
+            get { return createindex; }
+            set { createindex = value; }
+        }
+
 
         private string source = "";
         [Attributes.Property("Source", SoType.Text, "Source", "Source")]
@@ -116,6 +126,67 @@ namespace K2Field.SmartObjects.Services.SplunkService
 //scheme=https
 
 //.splunkrc
+
+            return this;
+        }
+
+        [Attributes.Method("SubmitMessage", SourceCode.SmartObjects.Services.ServiceSDK.Types.MethodType.Execute, "SubmitMessage", "SubmitMessage",
+        new string[] { "Message", "Index", "CreateIndex", "Source", "SourceType" }, //required property array (no required properties for this sample)
+        new string[] { "Message", "Index", "CreateIndex", "Source", "SourceType" }, //input property array (no optional input properties for this sample)
+        new string[] { "Message", "Index", "CreateIndex", "Source", "SourceType", "ResultStatus", "ResultMessage" })] //return property array (2 properties for this example)
+
+        public async Task<SplunkMessage> PostMessage()
+        {
+
+            using (var service = new Splunk.Client.Service(SdkHelper.Splunk.Scheme, SdkHelper.Splunk.Host, SdkHelper.Splunk.Port, new Splunk.Client.Namespace(user: "nobody", app: "K2")))
+            {
+
+                await service.LogOnAsync(SdkHelper.Splunk.Username, SdkHelper.Splunk.Password);
+
+                string indexName = this.Index;
+                Splunk.Client.Index index = await service.Indexes.GetOrNullAsync(indexName);
+
+                if (index == null && !this.CreateIndex)
+                {
+                    this.ResultStatus = "Error";
+                    this.ResultMessage = "Index does not exist";
+                    return this;
+                } else if (index == null && this.CreateIndex)
+                {
+                    index = await service.Indexes.CreateAsync(indexName);
+                }
+                else if (index == null)
+                {
+                    this.ResultStatus = "Error";
+                    this.ResultMessage = "Index does not exist";
+                    return this;
+                }
+                
+                try
+                {
+                    await index.EnableAsync();
+
+                    Splunk.Client.Transmitter transmitter = service.Transmitter;
+                    Splunk.Client.SearchResult result;
+                    
+                    result = await transmitter.SendAsync(this.Message, indexName);
+
+                    //using (var results = await service.SearchOneShotAsync(string.Format("search index={0}", indexName)))
+                    //{
+                    //    foreach (Splunk.Client.SearchResult task in results)
+                    //    {
+                    //        Console.WriteLine(task);
+                    //    }
+                    //}
+                }
+                catch (Exception ex)
+                {
+                    this.ResultStatus = "Error";
+                    this.ResultMessage = ex.Message;
+                }
+
+                this.ResultStatus = "OK";
+            }
 
             return this;
         }
