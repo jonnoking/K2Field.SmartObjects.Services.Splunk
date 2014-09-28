@@ -16,6 +16,7 @@ using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using Splunk.Client.Helpers;
+using System.Threading;
 
 namespace K2Field.SmartObjects.Services.Splunk.Sandbox
 {
@@ -31,7 +32,7 @@ namespace K2Field.SmartObjects.Services.Splunk.Sandbox
             };
         }
 
-        private void btnPost_Click(object sender, EventArgs e)
+        private async void btnPost_Click(object sender, EventArgs e)
         {
 
             using (var service = new Service(SdkHelper.Splunk.Scheme, SdkHelper.Splunk.Host, SdkHelper.Splunk.Port, new Namespace(user: "nobody", app: "search")))
@@ -46,6 +47,8 @@ namespace K2Field.SmartObjects.Services.Splunk.Sandbox
                 string indexName = "k2";
                 Index index = Task.Run(() => service.Indexes.GetOrNullAsync(indexName).Result).Result;
                 //var result = Task.Run(() => SaveAssetDataAsDraft().Result).Result;
+                
+                //service.SearchAsync("", 100, ExecutionMode.)
 
                 if (index != null)
                 {
@@ -83,6 +86,71 @@ namespace K2Field.SmartObjects.Services.Splunk.Sandbox
                 if (exception != null)
                 {
                     throw exception;
+                }
+            }
+        }
+
+        private async void btnSearch_Click(object sender, System.EventArgs e)
+        {
+            using (var service = new Service(SdkHelper.Splunk.Scheme, SdkHelper.Splunk.Host, SdkHelper.Splunk.Port, new Namespace(user: "nobody", app: "search")))
+            {
+                //Task task = Run(service);
+
+                //while (!task.IsCanceled)
+                //{
+                //    Task.Delay(500).Wait();
+                //}
+                await Run(service);
+            }
+        }
+
+        static async Task Run(Service service)
+        {
+            await service.LogOnAsync(SdkHelper.Splunk.Username, SdkHelper.Splunk.Password);
+            //Console.WriteLine("Press return to cancel.");
+            //index=k2 | stats count by name
+            //search index=_internal | stats count by method
+            string searchQuery = "search index=k2 name=*jonno*";
+
+            Job realtimeJob = await service.Jobs.CreateAsync(searchQuery, args: new JobArgs
+            {
+                SearchMode = SearchMode.RealTime,
+                EarliestTime = "rt-1m",
+                LatestTime = "rt",
+            });
+
+            var tokenSource = new CancellationTokenSource();
+
+//#pragma warning disable 4014
+//            //// Because this call is not awaited, execution of the current 
+//            //// method continues before the call is completed. Consider 
+//            //// applying the 'await' operator to the result of the call.
+
+//            Task.Run(async () =>
+//            {
+//                Console.ReadLine();
+
+//                await realtimeJob.CancelAsync();
+//                tokenSource.Cancel();
+//            });
+
+//#pragma warning restore 4014
+
+            while (!tokenSource.IsCancellationRequested)
+            {
+                using (SearchResultStream stream = await realtimeJob.GetSearchPreviewAsync())
+                {
+                    Console.WriteLine("fieldnames: " + string.Join(";", stream.FieldNames));
+                    Console.WriteLine("fieldname count: " + stream.FieldNames.Count);
+                    Console.WriteLine("final result: " + stream.IsFinal);
+
+                    foreach (SearchResult result in stream)
+                    {
+                        Console.WriteLine(result.GetValue("_raw"));
+                    }
+
+                    Console.WriteLine("");
+                    await Task.Delay(60000, tokenSource.Token);
                 }
             }
         }
