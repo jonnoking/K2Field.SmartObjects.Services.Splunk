@@ -108,14 +108,15 @@ namespace K2Field.SmartObjects.Services.Splunk.Sandbox
         {
             await service.LogOnAsync(SdkHelper.Splunk.Username, SdkHelper.Splunk.Password);
             //Console.WriteLine("Press return to cancel.");
-            //index=k2 | stats count by name
+            //search index=k2 | stats count by name
             //search index=_internal | stats count by method
-            string searchQuery = "search index=k2 name=*jonno*";
+            //search index=k2 name=*jonno*
+            string searchQuery = "search index=k2 | stats count by name";
 
             Job realtimeJob = await service.Jobs.CreateAsync(searchQuery, args: new JobArgs
             {
                 SearchMode = SearchMode.RealTime,
-                EarliestTime = "rt-1m",
+                EarliestTime = "rt-1w",
                 LatestTime = "rt",
             });
 
@@ -146,7 +147,12 @@ namespace K2Field.SmartObjects.Services.Splunk.Sandbox
 
                     foreach (SearchResult result in stream)
                     {
-                        Console.WriteLine(result.GetValue("_raw"));
+                        for (int i = 0; i < result.FieldNames.Count; i++)
+                        {
+                            Console.WriteLine(result.FieldNames[i] + " - " + result.GetValue(result.FieldNames[i]));
+                        }
+                        Console.WriteLine("#########");
+                            //Console.WriteLine(result.GetValue("_raw"));
                     }
 
                     Console.WriteLine("");
